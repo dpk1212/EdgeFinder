@@ -1,6 +1,6 @@
 # MLB Statcast Game Preview Generator
 
-A Python tool that generates detailed game previews using MLB Statcast data. This tool creates side-by-side comparisons of two teams' lineups with advanced metrics and visual indicators of player performance.
+A web application that generates detailed game previews using MLB Statcast data. This tool creates side-by-side comparisons of two teams' lineups with advanced metrics and visual indicators of player performance.
 
 ## Features
 
@@ -17,8 +17,10 @@ A Python tool that generates detailed game previews using MLB Statcast data. Thi
 - Visual performance indicators with color coding
 - Clean, professional table layout
 - High-resolution output
+- Web interface for easy lineup input
+- API endpoint for programmatic access
 
-## Installation
+## Local Development
 
 1. Clone the repository:
 ```bash
@@ -37,37 +39,56 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Usage
-
-1. Edit the lineups in `statcast_preview.py`:
-```python
-team1 = [
-    {'name': 'Player Name', 'position': 'POS'},
-    # Add more players...
-]
-
-team2 = [
-    {'name': 'Player Name', 'position': 'POS'},
-    # Add more players...
-]
-```
-
-2. Run the script:
+4. Start the Flask API:
 ```bash
-python statcast_preview.py
+python api.py
 ```
 
-3. The script will generate a `game_preview.png` file with the visualization.
+5. Open index.html in your browser to use the web interface.
 
-## Example Output
+## Deployment
 
-The generated preview includes:
-- Team names and lineups
-- Advanced Statcast metrics for each player
-- Color-coded performance indicators:
-  - Red: Above average performance
-  - White: Average performance
-  - Blue: Below average performance
+### Deploy to GitHub Pages
+
+1. Go to your repository's Settings
+2. Navigate to Pages
+3. Select your main branch as the source
+4. Save the changes
+
+The static frontend will be available at `https://dpk1212.github.io/EdgeFinder`
+
+### Deploy the API to Heroku
+
+1. Create a new Heroku app:
+```bash
+heroku create your-app-name
+```
+
+2. Push to Heroku:
+```bash
+git push heroku main
+```
+
+3. Update the API URL in index.html to point to your Heroku app.
+
+## API Usage
+
+Generate a preview using the API:
+
+```bash
+curl -X POST https://your-app.herokuapp.com/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "team1": [
+      {"name": "Player Name", "position": "POS"},
+      ...
+    ],
+    "team2": [
+      {"name": "Player Name", "position": "POS"},
+      ...
+    ]
+  }'
+```
 
 ## Data Sources
 
