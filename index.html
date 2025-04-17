@@ -10,21 +10,44 @@
             background-color: #f8f9fa;
             padding-top: 2rem;
         }
+        .game-card {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .game-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .game-card.selected {
+            border: 2px solid #0d6efd;
+        }
         .team-input {
             background-color: white;
             padding: 1.5rem;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             margin-bottom: 1rem;
+            display: none;
         }
-        .preview-container {
-            background-color: white;
-            padding: 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 2rem 0;
         }
-        .player-row {
-            margin-bottom: 1rem;
+        .error-message {
+            display: none;
+            color: #dc3545;
+            text-align: center;
+            margin: 1rem 0;
+        }
+        .game-time {
+            color: #6c757d;
+            font-size: 0.9rem;
         }
     </style>
 </head>
@@ -32,68 +55,57 @@
     <div class="container">
         <h1 class="text-center mb-4">MLB Statcast Game Preview Generator</h1>
         
-        <div class="row">
-            <div class="col-md-6">
-                <div class="team-input">
-                    <h3>Team 1</h3>
-                    <div id="team1-players">
-                        <div class="player-row">
-                            <div class="row">
-                                <div class="col-8">
-                                    <input type="text" class="form-control" placeholder="Player Name">
-                                </div>
-                                <div class="col-4">
-                                    <select class="form-select">
-                                        <option value="C">C</option>
-                                        <option value="1B">1B</option>
-                                        <option value="2B">2B</option>
-                                        <option value="3B">3B</option>
-                                        <option value="SS">SS</option>
-                                        <option value="LF">LF</option>
-                                        <option value="CF">CF</option>
-                                        <option value="RF">RF</option>
-                                        <option value="DH">DH</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
+        <div id="games-container" class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3>Today's Games</h3>
+                    <div class="loading-games spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading games...</span>
                     </div>
-                    <button class="btn btn-secondary mt-2" onclick="addPlayer('team1-players')">Add Player</button>
                 </div>
-            </div>
-            
-            <div class="col-md-6">
-                <div class="team-input">
-                    <h3>Team 2</h3>
-                    <div id="team2-players">
-                        <div class="player-row">
-                            <div class="row">
-                                <div class="col-8">
-                                    <input type="text" class="form-control" placeholder="Player Name">
-                                </div>
-                                <div class="col-4">
-                                    <select class="form-select">
-                                        <option value="C">C</option>
-                                        <option value="1B">1B</option>
-                                        <option value="2B">2B</option>
-                                        <option value="3B">3B</option>
-                                        <option value="SS">SS</option>
-                                        <option value="LF">LF</option>
-                                        <option value="CF">CF</option>
-                                        <option value="RF">RF</option>
-                                        <option value="DH">DH</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <button class="btn btn-secondary mt-2" onclick="addPlayer('team2-players')">Add Player</button>
+                <div id="games-list">
+                    <!-- Games will be populated here -->
                 </div>
             </div>
         </div>
-        
-        <div class="text-center mt-4 mb-4">
-            <button class="btn btn-primary btn-lg" onclick="generatePreview()">Generate Preview</button>
+
+        <div id="team-inputs" style="display: none;">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="team-input">
+                        <h3 id="away-team-name">Away Team</h3>
+                        <div id="away-team-players">
+                            <!-- Away team players will be added here -->
+                        </div>
+                        <button class="btn btn-secondary mt-2" onclick="addPlayer('away-team-players')">Add Player</button>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="team-input">
+                        <h3 id="home-team-name">Home Team</h3>
+                        <div id="home-team-players">
+                            <!-- Home team players will be added here -->
+                        </div>
+                        <button class="btn btn-secondary mt-2" onclick="addPlayer('home-team-players')">Add Player</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center mt-4 mb-4">
+                <button class="btn btn-primary btn-lg" onclick="generatePreview()">Generate Preview</button>
+            </div>
+        </div>
+
+        <div class="loading" id="loading-section">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Generating preview... This may take a few moments.</p>
+        </div>
+
+        <div class="error-message" id="error-section">
+            <p id="error-text"></p>
         </div>
         
         <div class="preview-container" id="preview-section" style="display: none;">
@@ -106,9 +118,84 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // API URLs
+        const ODDS_API_KEY = '400ebbb14e2fcc4216b14ec91dfde443';
+        const ODDS_API_URL = 'https://api.the-odds-api.com/v4/sports/baseball_mlb/odds';
+        const API_URL = 'http://localhost:5000';
+
+        // Load games when page loads
+        document.addEventListener('DOMContentLoaded', loadGames);
+
+        async function loadGames() {
+            try {
+                const response = await fetch(`${ODDS_API_URL}?apiKey=${ODDS_API_KEY}&regions=us`);
+                if (!response.ok) throw new Error('Failed to fetch games');
+                
+                const games = await response.json();
+                displayGames(games);
+            } catch (error) {
+                console.error('Error loading games:', error);
+                document.getElementById('games-list').innerHTML = 
+                    '<div class="alert alert-danger">Failed to load today\'s games. Please try again later.</div>';
+            } finally {
+                document.querySelector('.loading-games').style.display = 'none';
+            }
+        }
+
+        function displayGames(games) {
+            const gamesContainer = document.getElementById('games-list');
+            gamesContainer.innerHTML = '';
+
+            games.forEach(game => {
+                const gameTime = new Date(game.commence_time);
+                const card = document.createElement('div');
+                card.className = 'game-card';
+                card.onclick = () => selectGame(game);
+                card.innerHTML = `
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <h4>${game.away_team}</h4>
+                        </div>
+                        <div class="col-auto">
+                            <h4>@</h4>
+                        </div>
+                        <div class="col">
+                            <h4>${game.home_team}</h4>
+                        </div>
+                        <div class="col-12">
+                            <div class="game-time">${gameTime.toLocaleString()}</div>
+                        </div>
+                    </div>
+                `;
+                gamesContainer.appendChild(card);
+            });
+        }
+
+        function selectGame(game) {
+            // Remove selected class from all games
+            document.querySelectorAll('.game-card').forEach(card => card.classList.remove('selected'));
+            // Add selected class to clicked game
+            event.currentTarget.classList.add('selected');
+
+            // Show team inputs
+            document.getElementById('team-inputs').style.display = 'block';
+            
+            // Update team names
+            document.getElementById('away-team-name').textContent = game.away_team;
+            document.getElementById('home-team-name').textContent = game.home_team;
+
+            // Clear existing players
+            document.getElementById('away-team-players').innerHTML = '';
+            document.getElementById('home-team-players').innerHTML = '';
+
+            // Add initial player row for each team
+            addPlayer('away-team-players');
+            addPlayer('home-team-players');
+        }
+
         function addPlayer(teamId) {
             const playerTemplate = `
-                <div class="player-row">
+                <div class="player-row mb-3">
                     <div class="row">
                         <div class="col-8">
                             <input type="text" class="form-control" placeholder="Player Name">
@@ -132,23 +219,54 @@
             document.getElementById(teamId).insertAdjacentHTML('beforeend', playerTemplate);
         }
 
-        function generatePreview() {
-            // Collect player data
-            const team1Players = Array.from(document.querySelectorAll('#team1-players .player-row')).map(row => ({
-                name: row.querySelector('input').value,
-                position: row.querySelector('select').value
-            }));
-            
-            const team2Players = Array.from(document.querySelectorAll('#team2-players .player-row')).map(row => ({
-                name: row.querySelector('input').value,
-                position: row.querySelector('select').value
-            }));
+        async function generatePreview() {
+            // Show loading spinner
+            document.getElementById('loading-section').style.display = 'block';
+            document.getElementById('error-section').style.display = 'none';
+            document.getElementById('preview-section').style.display = 'none';
 
-            // For now, just show the example preview
-            document.getElementById('preview-section').style.display = 'block';
-            document.getElementById('preview-image').src = 'examples/sample_preview.png';
+            // Collect player data
+            const awayTeamPlayers = Array.from(document.querySelectorAll('#away-team-players .player-row')).map(row => ({
+                name: row.querySelector('input').value,
+                position: row.querySelector('select').value
+            })).filter(player => player.name.trim() !== '');
             
-            // TODO: Add actual API call to generate preview
+            const homeTeamPlayers = Array.from(document.querySelectorAll('#home-team-players .player-row')).map(row => ({
+                name: row.querySelector('input').value,
+                position: row.querySelector('select').value
+            })).filter(player => player.name.trim() !== '');
+
+            try {
+                // Make API call
+                const response = await fetch(`${API_URL}/generate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        team1: awayTeamPlayers,
+                        team2: homeTeamPlayers
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                // Get the image blob
+                const blob = await response.blob();
+                const imageUrl = URL.createObjectURL(blob);
+
+                // Hide loading spinner and show preview
+                document.getElementById('loading-section').style.display = 'none';
+                document.getElementById('preview-section').style.display = 'block';
+                document.getElementById('preview-image').src = imageUrl;
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('loading-section').style.display = 'none';
+                document.getElementById('error-section').style.display = 'block';
+                document.getElementById('error-text').textContent = 'Error generating preview. Please try again.';
+            }
         }
     </script>
 </body>
