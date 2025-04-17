@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Today's MLB Games & Pitcher Matchups</title>
+    <!-- Include Plotly.js via CDN -->
+    <script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 1200px; margin: auto; background-color: #f0f2f5; }
+        h1 { text-align: center; color: #333; }
+        h2 { text-align: center; color: #444; }
+        .games-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
+        .game-card {
+            border: 1px solid #d1d9e6; border-radius: 8px; padding: 15px;
+            background-color: #ffffff;
+            display: flex; flex-direction: column;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transition: box-shadow 0.3s ease;
+        }
+        .game-card:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+        .game-card h3 { margin-top: 0; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 10px; font-size: 1.1em; color: #1a2b4d; }
+        .matchup, .info { margin-bottom: 10px; font-size: 0.95em; }
+        .matchup span, .info span { display: block; margin-bottom: 5px; }
+        .team-name { font-weight: bold; }
+        .vs { text-align: center; font-style: italic; margin: 5px 0; }
+        .info span { font-size: 0.9em; color: #555; }
+
+        /* Pitcher Comparison Section Styles */
+        .pitcher-comparison {
+             margin-top: 15px; border-top: 1px dashed #eee; padding-top: 15px;
+        }
+        .pitcher-comparison h4 { text-align: center; margin-top: 0; margin-bottom: 10px; color: #333; font-size: 1em; }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr; /* Away | Stat Name | Home */
+            gap: 5px 10px; /* row-gap column-gap */
+            align-items: center;
+            font-size: 0.85em;
+        }
+        .comparison-grid > div { padding: 3px; border-radius: 3px; }
+        .stat-label { font-weight: bold; text-align: center; color: #555; grid-column: 2; }
+        .pitcher-stat-away { text-align: left; grid-column: 1; }
+        .pitcher-stat-home { text-align: right; grid-column: 3; }
+        .pitcher-name-away { font-weight: bold; grid-column: 1; margin-bottom: 5px; }
+        .pitcher-name-home { font-weight: bold; grid-column: 3; text-align: right; margin-bottom: 5px; }
+        .percentile { font-size: 0.9em; color: #666; margin-left: 3px; }
+        .stat-value-high { color: #d00000; font-weight: bold; } /* Red for high percentiles (good for K%, Whiff%, Velo; bad for BB%, Barrel%, HardHit%) */
+        .stat-value-low { color: #00539C; font-weight: bold; } /* Blue for low percentiles (opposite) */
+        .loader-small { font-size: 0.8em; color: #888; text-align: center; padding: 10px; }
+
+        /* Starter Link */
+        .starter-link { color: #007bff; text-decoration: none; cursor: pointer; font-weight: bold; }
+        .starter-link:hover { text-decoration: underline; }
+        .starter-section span { display: block; margin-bottom: 5px; }
+        .starter-section strong { font-size: 1em; margin-bottom: 8px; display: block; }
+
+        /* General Loading/Error */
+        #loading, #error { margin-top: 15px; text-align: center; font-weight: bold; padding: 20px; }
+        #loading { color: #555; }
+        #error { color: red; background-color: #ffebee; border: 1px solid red; border-radius: 4px; }
+        .hidden { display: none; }
+
+        /* Player Detail Section */
+        #player-stats-container { margin-top: 30px; padding: 20px; border: 1px solid #d1d9e6; border-radius: 8px; background-color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        #player-stats-container h2 { border-bottom: 1px solid #eee; padding-bottom: 10px; font-size: 1.4em; }
+        .stats-section { margin-bottom: 20px; }
+        .stats-section h3 { margin-bottom: 10px; color: #333; font-size: 1.1em; border-bottom: 1px solid #f0f0f0; padding-bottom: 5px; }
+        pre { background-color: #f8f9fa; padding: 10px; border: 1px solid #e9ecef; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; font-size: 0.9em; }
+        .chart-container { width: 100%; min-height: 300px; margin-bottom: 15px; border: 1px solid #eee; border-radius: 4px; padding: 5px; }
+
+        /* Basic responsive adjustments */
+        @media (max-width: 700px) {
+            .games-container { grid-template-columns: 1fr; }
+            .comparison-grid { font-size: 0.8em; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Today's MLB Games & Pitcher Matchups</h1>
+    <p id="today-date" style="text-align: center; color: #666;"></p>
+
+    <div id="loading">Loading today's schedule...</div>
+    <div id="error" class="hidden"></div>
+
+    <div id="games-list" class="games-container"></div>
+
+    <!-- Container for displaying selected player detailed stats -->
+    <div id="player-stats-container" class="hidden">
+        <h2 id="player-stats-name">Player Statistics</h2>
+         <div id="player-loading" class="hidden">Loading player stats...</div>
+         <div id="player-error" class="hidden"></div>
+         <div id="player-stats-content">
+            <!-- Basic info and traditional stats still shown here on deep dive -->
+            <div class="stats-section">
+                 <h3>Basic Info (<span id="player-stats-season"></span>)</h3>
+                 <pre id="player-basic-info"></pre>
+            </div>
+             <div class="stats-section" id="trad-summary-section" class="hidden">
+                 <h3>Summary Stats</h3>
+                 <pre id="summary-stats-display"></pre>
+             </div>
+            <!-- Detailed Chart Sections -->
+            <div class="stats-section" id="detailed-pitching-section" class="hidden">
+                 <h3>Detailed Statcast Pitching</h3>
+                 <div id="pitch-mix-chart" class="chart-container"></div>
+                 <div id="pitch-velo-chart" class="chart-container"></div>
+                 <div id="pitch-location-chart" class="chart-container"></div>
+            </div>
+            <div class="stats-section" id="detailed-batting-section" class="hidden">
+                <h3>Detailed Statcast Batting</h3>
+                <div id="exit-velo-chart" class="chart-container"></div>
+                <div id="launch-scatter-chart" class="chart-container"></div>
+                <div id="spray-chart" class="chart-container"></div>
+            </div>
+             <p id="no-detailed-stats-message" class="hidden">No detailed Statcast chart data found for this player/season.</p>
+         </div>
+    </div>
+
+    <script>
+        const loadingDiv = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+        const gamesListDiv = document.getElementById('games-list');
+        const playerStatsContainer = document.getElementById('player-stats-container');
+        const playerLoading = document.getElementById('player-loading');
+        const playerError = document.getElementById('player-error');
+        const playerStatsContent = document.getElementById('player-stats-content');
+        const todayDateElem = document.getElementById('today-date');
+
+        const STAT_PERCENTILE_CONFIG = {
+            // Higher percentile is better for these stats
+            higher_is_better: ['K%', 'Whiff%', 'Fastball Velo'],
+            // Lower percentile is better for these stats (closer to 0)
+            lower_is_better: ['BB%', 'Barrel%', 'HardHit%', 'Avg EV', 'xERA'] // Note: xERA itself is lower is better
+        };
+
+        // Format date for display
+        const today = new Date();
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        todayDateElem.textContent = today.toLocaleDateString('en-US', options);
+
+        // -- Main Function to Fetch and Display Schedule & Pitcher Summaries --
+        async function fetchScheduleAndPitcherSummaries() {
+            loadingDiv.classList.remove('hidden');
+            errorDiv.classList.add('hidden');
+            gamesListDiv.innerHTML = '';
+
+            try {
+                // 1. Fetch Today's Schedule
+                const scheduleResponse = await fetch('/api/today_schedule');
+                if (!scheduleResponse.ok) throw await createError(scheduleResponse, 'fetching schedule');
+                const scheduleData = await scheduleResponse.json();
+
+                if (!scheduleData.games || scheduleData.games.length === 0) {
+                    gamesListDiv.innerHTML = '<p style="text-align:center;">No MLB games scheduled for today.</p>';
+                    loadingDiv.classList.add('hidden');
+                    return;
+                }
+
+                // 2. Display Initial Game Cards with Loaders for Pitchers
+                displayInitialGameCards(scheduleData.games);
+                loadingDiv.classList.add('hidden'); // Hide main loader once cards are up
+
+                // 3. Fetch Summary Stats for All Probable Starters in Parallel
+                const pitcherStatPromises = [];
+                const pitcherInfoMap = new Map(); // Store pitcher info { id, name, cardElementId }
+
+                scheduleData.games.forEach((game, index) => {
+                    const gameId = `game-${index}`;
+                    if (game.away_probable_pitcher_id) {
+                        pitcherInfoMap.set(game.away_probable_pitcher_id, { name: game.away_probable_pitcher, cardElementId: gameId, side: 'away' });
+                        pitcherStatPromises.push(fetchPlayerSummary(game.away_probable_pitcher_id));
+                    }
+                    if (game.home_probable_pitcher_id) {
+                         pitcherInfoMap.set(game.home_probable_pitcher_id, { name: game.home_probable_pitcher, cardElementId: gameId, side: 'home' });
+                        pitcherStatPromises.push(fetchPlayerSummary(game.home_probable_pitcher_id));
+                    }
+                });
+
+                const pitcherStatResults = await Promise.allSettled(pitcherStatPromises);
+
+                // 4. Process Results and Update Game Cards with Pitcher Stats
+                const statsById = {};
+                pitcherStatResults.forEach(result => {
+                    if (result.status === 'fulfilled' && result.value && result.value.player_info) {
+                        statsById[result.value.player_info.id] = result.value; // Store fetched stats by ID
+                    } else if (result.status === 'rejected') {
+                        // Store error information associated with the player ID
+                        const playerId = result.reason?.playerId; // Assuming error object has playerId
+                        if (playerId) {
+                            const playerInfo = pitcherInfoMap.get(playerId);
+                            statsById[playerId] = { error: true, name: playerInfo?.name || 'Unknown', message: result.reason?.message || 'Unknown error' };
+                        }
+                        console.error("Failed to fetch pitcher summary:", result.reason);
+                    }
+                });
+
+                // Group stats by game
+                const statsByGame = {};
+                 pitcherInfoMap.forEach((info, id) => {
+                     if (!statsByGame[info.cardElementId]) {
+                         statsByGame[info.cardElementId] = { away: null, home: null };
+                     }
+                     statsByGame[info.cardElementId][info.side] = statsById[id] || { error: true, name: info.name, message: 'Data missing after fetch' };
+                 });
+
+                // Update each game card with the fetched comparison stats
+                Object.keys(statsByGame).forEach(gameId => {
+                    const gameStats = statsByGame[gameId];
+                    updateGameCardWithPitcherComparison(gameId, gameStats.away, gameStats.home);
+                });
+
+            } catch (err) {
+                console.error("Error in fetchScheduleAndPitcherSummaries:", err);
+                errorDiv.textContent = `Failed to load game data: ${err.message}`;
+                errorDiv.classList.remove('hidden');
+                loadingDiv.classList.add('hidden');
+            }
+        }
+
+        // -- Helper Functions --
+
+        async function createError(response, context) {
+            let errorMsg = `Error ${context} (HTTP ${response.status})`;
+             try {
+                 const errData = await response.json();
+                 errorMsg = errData.error || errorMsg;
+             } catch (e) { /* Ignore */ }
+             return new Error(errorMsg);
+        }
+
+        function displayInitialGameCards(games) {
+            gamesListDiv.innerHTML = '';
+            games.forEach((game, index) => {
+                const card = document.createElement('div');
+                const gameId = `game-${index}`;
+                card.id = gameId;
+                card.classList.add('game-card');
+                const gameTime = game.time ? new Date(game.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'TBD';
+
+                card.innerHTML = `
+                    <h3>${game.away_team} @ ${game.home_team}</h3>
+                    <div class="matchup">
+                        <span class="team-name">Away: ${game.away_team}</span>
+                        <span class="team-name">Home: ${game.home_team}</span>
+                    </div>
+                    <div class="info">
+                        <span>Status: ${game.status || 'Scheduled'}</span>
+                        <span>Time: ${gameTime}</span>
+                        <span>Venue: ${game.venue || 'N/A'}</span>
+                    </div>
+                    <div class="pitcher-comparison" id="compare-${gameId}">
+                        <h4>Starting Pitcher Comparison</h4>
+                        <div class="comparison-grid">
+                             <div class="pitcher-name-away">${createStarterLink(game.away_probable_pitcher, game.away_probable_pitcher_id)}</div>
+                             <div></div> 
+                             <div class="pitcher-name-home">${createStarterLink(game.home_probable_pitcher, game.home_probable_pitcher_id)}</div>
+                             <div class="pitcher-stat-away loader-small" id="loader-away-${gameId}">Loading...</div>
+                             <div class="stat-label">Stats</div>
+                             <div class="pitcher-stat-home loader-small" id="loader-home-${gameId}">Loading...</div>
+                        </div>
+                    </div>
+                `;
+                gamesListDiv.appendChild(card);
+                 // Remove loaders if pitcher is TBD
+                 if (!game.away_probable_pitcher_id) {
+                    document.getElementById(`loader-away-${gameId}`).style.display = 'none';
+                 }
+                 if (!game.home_probable_pitcher_id) {
+                    document.getElementById(`loader-home-${gameId}`).style.display = 'none';
+                 }
+            });
+        }
+
+        async function fetchPlayerSummary(playerId) {
+            if (!playerId) return null;
+            const season = new Date().getFullYear();
+            // Fetch ONLY summary stats (no full_stats=true)
+            const response = await fetch(`/api/player_stats?mlbam_id=${playerId}&season=${season}`);
+            if (!response.ok) {
+                 // Throw an error object that includes the player ID for context
+                 const baseError = await createError(response, `fetching summary for ${playerId}`);
+                 throw { playerId: playerId, message: baseError.message }; 
+            }
+            return await response.json();
+        }
+
+        function updateGameCardWithPitcherComparison(gameId, awayPitcherData, homePitcherData) {
+            const comparisonGrid = document.querySelector(`#compare-${gameId} .comparison-grid`);
+             const awayLoader = document.getElementById(`loader-away-${gameId}`);
+             const homeLoader = document.getElementById(`loader-home-${gameId}`);
+
+            if (!comparisonGrid) return;
+            
+            // Remove loaders first
+            if (awayLoader) awayLoader.remove();
+            if (homeLoader) homeLoader.remove();
+
+            const awayName = awayPitcherData?.player_info?.name || awayPitcherData?.name || "TBD";
+            const homeName = homePitcherData?.player_info?.name || homePitcherData?.name || "TBD";
+            // const awayId = awayPitcherData?.player_info?.id;
+            // const homeId = homePitcherData?.player_info?.id;
+
+            // Clear previous stat rows except names
+            const existingStatRows = comparisonGrid.querySelectorAll('.stat-label, .pitcher-stat-away:not(.pitcher-name-away), .pitcher-stat-home:not(.pitcher-name-home)');
+            existingStatRows.forEach(el => el.remove());
+
+            let comparisonHTML = '';
+
+            // Handle case where one or both pitchers had errors
+             if (awayPitcherData?.error) {
+                 comparisonHTML += createErrorRow('Away', awayPitcherData.message);
+             }
+             if (homePitcherData?.error) {
+                 comparisonHTML += createErrorRow('Home', homePitcherData.message);
+             }
+             if (awayPitcherData?.error || homePitcherData?.error) {
+                 comparisonGrid.insertAdjacentHTML('beforeend', comparisonHTML);
+                 return; // Stop if there were errors loading essential data
+             }
+              // Handle case where pitchers are TBD or lack summary stats
+             if (!awayPitcherData?.summary_stats?.pitching && !homePitcherData?.summary_stats?.pitching) {
+                 comparisonGrid.insertAdjacentHTML('beforeend', `<div class="loader-small" style="grid-column: 1 / -1;">No summary stats found for either pitcher.</div>`);
+                 return;
+             }
+
+            // --- Key Stats to Compare ---
+            const statsToCompare = [
+                 { key: 'ERA', label: 'ERA', higherIsBetter: false, format: 'float' },
+                 { key: 'FIP', label: 'FIP', higherIsBetter: false, format: 'float' },
+                 { key: 'xERA', label: 'xERA', higherIsBetter: false, format: 'float' },
+                 { key: 'WHIP', label: 'WHIP', higherIsBetter: false, format: 'float' },
+                 { key: 'K/9', label: 'K/9', higherIsBetter: true, format: 'float' },
+                 { key: 'BB/9', label: 'BB/9', higherIsBetter: false, format: 'float' },
+                 { key: 'IP', label: 'IP', higherIsBetter: true, format: 'float' },
+            ];
+             const percentilesToCompare = [
+                 { key: 'K%', label: 'K%', higherIsBetter: true },
+                 { key: 'BB%', label: 'BB%', higherIsBetter: false },
+                 { key: 'Whiff%', label: 'Whiff%', higherIsBetter: true },
+                 { key: 'Barrel%', label: 'Barrel%', higherIsBetter: false },
+                 { key: 'HardHit%', label: 'HardHit%', higherIsBetter: false },
+                 { key: 'Avg EV', label: 'Avg EV', higherIsBetter: false },
+                 { key: 'Fastball Velo', label: 'FB Velo', higherIsBetter: true },
+             ];
+
+             // Add rows for standard stats
+             statsToCompare.forEach(stat => {
+                 const awayVal = awayPitcherData?.summary_stats?.pitching?.[stat.key];
+                 const homeVal = homePitcherData?.summary_stats?.pitching?.[stat.key];
+                 comparisonHTML += createComparisonRow(stat.label, awayVal, homeVal, stat.format);
+             });
+
+              // Add rows for percentiles
+             percentilesToCompare.forEach(perc => {
+                 const awayPerc = awayPitcherData?.summary_stats?.pitching_percentiles?.[perc.key];
+                 const homePerc = homePitcherData?.summary_stats?.pitching_percentiles?.[perc.key];
+                 comparisonHTML += createComparisonRow(perc.label, awayPerc, homePerc, 'percentile', perc.higherIsBetter);
+             });
+             
+             comparisonGrid.insertAdjacentHTML('beforeend', comparisonHTML);
+        }
+
+        function createComparisonRow(label, awayVal, homeVal, format = 'raw', higherIsBetter = null) {
+             const formatValue = (val, type) => {
+                 if (val === null || val === undefined || (typeof val === 'number' && isNaN(val))) return '-';
+                 if (type === 'float') return parseFloat(val).toFixed(val > 10 ? 1 : 2); // Fewer decimals for larger numbers like IP
+                 if (type === 'percentile') return `${parseInt(val)}<span class="percentile">%</span>`;
+                 return val; // Raw
+             };
+
+             const formatClass = (val, isHigherBetter) => {
+                 if (format !== 'percentile' || val === null || val === undefined || isHigherBetter === null || isNaN(parseInt(val))) return '';
+                 const numVal = parseInt(val);
+                 if (numVal >= 75) return isHigherBetter ? 'stat-value-high' : 'stat-value-low';
+                 if (numVal <= 25) return isHigherBetter ? 'stat-value-low' : 'stat-value-high';
+                 return '';
+             };
+
+            return `
+                <div class="pitcher-stat-away ${formatClass(awayVal, higherIsBetter)}">${formatValue(awayVal, format)}</div>
+                <div class="stat-label">${label}</div>
+                <div class="pitcher-stat-home ${formatClass(homeVal, higherIsBetter)}">${formatValue(homeVal, format)}</div>
+            `;
+        }
+         function createErrorRow(side, message) {
+             const col = side === 'Away' ? 1 : 3;
+             return `<div style="grid-column: ${col}; color: red; font-size: 0.8em; padding: 5px 0;">Error: ${message || 'Could not load stats'}</div>`;
+         }
+
+        function createStarterLink(name, id) {
+            if (name && id) {
+                return `<a href="#" class="starter-link" data-player-id="${id}" data-player-name="${name}" onclick="fetchAndDisplayPlayerDetailedStats(event)">${name}</a>`;
+            } else if (name) {
+                 return `<span>${name} (Stats N/A)</span>`;
+            } else {
+                return '<span>TBD</span>';
+            }
+        }
+
+        // Renamed function for fetching FULL stats on click
+        async function fetchAndDisplayPlayerDetailedStats(event) {
+            event.preventDefault();
+            const link = event.target;
+            const playerId = link.getAttribute('data-player-id');
+            const playerName = link.getAttribute('data-player-name');
+            const season = new Date().getFullYear();
+
+            if (!playerId) return;
+
+            playerStatsContainer.classList.remove('hidden');
+            playerLoading.classList.remove('hidden');
+            playerError.classList.add('hidden');
+            playerStatsContent.classList.add('hidden');
+            document.getElementById('player-stats-name').textContent = `Loading detailed stats for ${playerName}...`;
+            playerStatsContainer.scrollIntoView({ behavior: 'smooth' });
+
+            try {
+                // Request FULL stats this time
+                const response = await fetch(`/api/player_stats?mlbam_id=${playerId}&season=${season}&full_stats=true`);
+                if (!response.ok) throw await createError(response, `fetching detailed stats for ${playerName}`);
+                const data = await response.json();
+
+                displayPlayerDetailedStats(data, playerName);
+                playerStatsContent.classList.remove('hidden');
+
+            } catch (err) {
+                console.error("Error fetching detailed player stats:", err);
+                playerError.textContent = `Failed to load detailed stats for ${playerName}: ${err.message}`;
+                playerError.classList.remove('hidden');
+                document.getElementById('player-stats-name').textContent = `Stats for ${playerName}`;
+            } finally {
+                playerLoading.classList.add('hidden');
+            }
+        }
+
+        // Renamed function for displaying the DETAILED stats view
+        function displayPlayerDetailedStats(data, nameFromLink) {
+            // Reset sections
+            document.getElementById('trad-summary-section').classList.add('hidden');
+            document.getElementById('detailed-pitching-section').classList.add('hidden');
+            document.getElementById('detailed-batting-section').classList.add('hidden');
+            document.getElementById('no-detailed-stats-message').classList.add('hidden');
+            clearPlotlyCharts();
+
+            if (!data || !data.player_info) {
+                playerError.textContent = `Incomplete data received for ${nameFromLink}.`;
+                playerError.classList.remove('hidden');
+                document.getElementById('player-stats-name').textContent = `Stats for ${nameFromLink}`;
+                return;
+            }
+
+            const { player_info, summary_stats, detailed_statcast } = data;
+            const playerName = player_info.name || nameFromLink;
+            document.getElementById('player-stats-name').textContent = `Detailed Stats for ${playerName}`;
+            document.getElementById('player-stats-season').textContent = player_info.season || 'N/A';
+
+            // Display Basic Info
+            let basicInfo = { ...player_info };
+            delete basicInfo.summary_stats; // Keep it cleaner
+             delete basicInfo.detailed_statcast; // Remove if exists
+            document.getElementById('player-basic-info').textContent = JSON.stringify(basicInfo, null, 2);
+
+             // Display Summary Stats (even in detailed view)
+             if (summary_stats && (summary_stats.pitching || summary_stats.batting)) {
+                 document.getElementById('summary-stats-display').textContent = JSON.stringify(summary_stats, null, 2);
+                 document.getElementById('trad-summary-section').classList.remove('hidden');
+             }
+
+            let detailedStatsFound = false;
+
+            // Display Detailed Statcast Charts (if data exists)
+            if (detailed_statcast) {
+                 // Pitching Charts
+                 if (detailed_statcast.pitching_raw) {
+                    const pitchData = detailed_statcast.pitching_raw;
+                    detailedStatsFound = true;
+                    document.getElementById('detailed-pitching-section').classList.remove('hidden');
+
+                    // --- Pitch Mix Chart --- 
+                    const pitchTypes = pitchData['pitch_type'] || [];
+                     const pitchCounts = pitchTypes.reduce((acc, val) => {
+                         if (isValidValue(val)) { acc[val] = (acc[val] || 0) + 1; }
+                         return acc;
+                     }, {});
+                     const pitchLabels = Object.keys(pitchCounts);
+                     const pitchValues = Object.values(pitchCounts);
+                     if (pitchLabels.length > 0) {
+                          const trace = [{ labels: pitchLabels, values: pitchValues, type: 'pie', hole: .4, textinfo: 'percent+label', automargin: true }];
+                          const layout = { title: 'Pitch Mix (%)', showlegend: false, height: 350, margin: { l: 20, r: 20, t: 50, b: 20 } };
+                          Plotly.newPlot('pitch-mix-chart', trace, layout, {responsive: true});
+                     } else { document.getElementById('pitch-mix-chart').innerHTML = ''; }
+
+                     // --- Velocity Histogram --- 
+                     const velocities = (pitchData['release_speed'] || []).filter(isValidNumber);
+                     if (velocities.length > 0) {
+                        const trace = [{ x: velocities, type: 'histogram', marker: { color: '#1f77b4'} }];
+                        const layout = { title: 'Pitch Velocity Distribution (mph)', xaxis: { title: 'Velocity' }, yaxis: { title: 'Count' }, height: 350, margin: { l: 50, r: 20, t: 50, b: 40 } };
+                        Plotly.newPlot('pitch-velo-chart', trace, layout, {responsive: true});
+                     } else { document.getElementById('pitch-velo-chart').innerHTML = ''; }
+
+                     // --- Location Chart --- 
+                     const plateX = pitchData['plate_x'] || [];
+                     const plateZ = pitchData['plate_z'] || [];
+                     let locations = { x: [], z: [] };
+                     for (let i = 0; i < plateX.length; i++) {
+                         if (isValidNumber(plateX[i]) && isValidNumber(plateZ[i])) {
+                             locations.x.push(plateX[i]);
+                             locations.z.push(plateZ[i]);
+                         }
+                     }
+                     if (locations.x.length > 0) {
+                         const trace = [{ x: locations.x, y: locations.z, type: 'histogram2dcontour', colorscale: 'Blues', reversescale: true, showscale: false, contours: { coloring: 'heatmap' } }];
+                         const layout = { title: 'Pitch Locations (Catcher's View)', xaxis: { title: 'Horizontal (ft)', range: [-2.5, 2.5] }, yaxis: { title: 'Vertical (ft)', range: [0, 5] }, height: 400, width: 350, margin: { l: 50, r: 20, t: 50, b: 40 }, shapes: [{ type: 'rect', x0: -0.83, x1: 0.83, y0: 1.5, y1: 3.5, line: { color: 'rgba(200, 0, 0, 0.8)', width: 2 } }] };
+                         Plotly.newPlot('pitch-location-chart', trace, layout, {responsive: true});
+                     } else { document.getElementById('pitch-location-chart').innerHTML = ''; }
+                 }
+
+                // Batting Charts
+                if (detailed_statcast.batting_raw) {
+                    const batData = detailed_statcast.batting_raw;
+                    detailedStatsFound = true;
+                     document.getElementById('detailed-batting-section').classList.remove('hidden');
+
+                     // --- Exit Velo Histogram --- 
+                    const exitVelo = (batData['launch_speed'] || []).filter(isValidNumber);
+                    if (exitVelo.length > 0) {
+                         const trace = [{ x: exitVelo, type: 'histogram', marker: { color: '#ff7f0e' } }];
+                         const layout = { title: 'Exit Velocity Distribution (mph)', xaxis: { title: 'Exit Velocity' }, yaxis: { title: 'Count' }, height: 350, margin: { l: 50, r: 20, t: 50, b: 40 } };
+                         Plotly.newPlot('exit-velo-chart', trace, layout, {responsive: true});
+                     } else { document.getElementById('exit-velo-chart').innerHTML = ''; }
+
+                     // --- Launch Scatter --- 
+                     const launchSpeed = batData['launch_speed'] || [];
+                     const launchAngle = batData['launch_angle'] || [];
+                     let launchData = { x: [], y: [] };
+                      for (let i = 0; i < launchSpeed.length; i++) {
+                          if (isValidNumber(launchSpeed[i]) && isValidNumber(launchAngle[i])) {
+                              launchData.x.push(launchSpeed[i]);
+                              launchData.y.push(launchAngle[i]);
+                          }
+                      }
+                     if (launchData.x.length > 0) {
+                        const trace = [{ x: launchData.x, y: launchData.y, mode: 'markers', type: 'scattergl', marker: { color: 'rgba(44, 160, 44, 0.6)', size: 5 } }];
+                        const layout = { title: 'Launch Angle vs. Exit Velocity', xaxis: { title: 'Exit Velocity (mph)' }, yaxis: { title: 'Launch Angle (degrees)' }, height: 400, margin: { l: 50, r: 20, t: 50, b: 40 } };
+                        Plotly.newPlot('launch-scatter-chart', trace, layout, {responsive: true});
+                    } else { document.getElementById('launch-scatter-chart').innerHTML = ''; }
+
+                    // --- Spray Chart --- 
+                    const hcX = batData['hc_x'] || [];
+                    const hcY = batData['hc_y'] || [];
+                    const events = batData['events'] || []; // Optional hover text
+                    let sprayData = { x: [], y: [], text: [] };
+                     for (let i = 0; i < hcX.length; i++) {
+                         if (isValidNumber(hcX[i]) && isValidNumber(hcY[i])) {
+                             sprayData.x.push(hcX[i]);
+                             sprayData.y.push(hcY[i]);
+                             sprayData.text.push(events[i] || ''); // Add event text or empty string
+                         }
+                     }
+                    if (sprayData.x.length > 0) {
+                         const trace = [{ x: sprayData.x, y: sprayData.y, mode: 'markers', type: 'scattergl', marker: { color: 'rgba(148, 103, 189, 0.7)', size: 6 }, hovertext: sprayData.text }];
+                         const layout = { title: 'Spray Chart (Raw Coordinates)', xaxis: { title: 'Horiz Field Coord', range: [0, 250] }, yaxis: { title: 'Vert Field Coord', range: [0, 250] }, height: 450, width: 450, margin: { l: 50, r: 20, t: 50, b: 40 } };
+                         Plotly.newPlot('spray-chart', trace, layout, {responsive: true});
+                    } else { document.getElementById('spray-chart').innerHTML = ''; }
+                 }
+            }
+
+            if (!detailedStatsFound) {
+                document.getElementById('no-detailed-stats-message').classList.remove('hidden');
+            }
+        }
+
+        // Helper to clear Plotly charts before redrawing
+        function clearPlotlyCharts() {
+            const chartDivIds = [
+                'pitch-mix-chart', 'pitch-velo-chart', 'pitch-location-chart',
+                'exit-velo-chart', 'launch-scatter-chart', 'spray-chart'
+            ];
+            chartDivIds.forEach(id => {
+                const div = document.getElementById(id);
+                if (div && div.offsetParent !== null) { // Check if div exists and is visible
+                    try { Plotly.purge(div); } catch(e) { console.warn(`Could not purge Plotly chart ${id}: ${e}`); }
+                    div.innerHTML = ''; // Clear content as fallback
+                }
+            });
+        }
+
+         // Simplified JS checks replacing the problematic pd helper
+         const isValidNumber = (v) => v !== null && v !== undefined && !isNaN(v);
+         const isValidValue = (v) => v !== null && v !== undefined;
+
+          // --- Initial Load --- Fetch schedule and summaries
+          fetchScheduleAndPitcherSummaries();
+
+    </script>
+
+</body>
+</html> 

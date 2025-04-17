@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PyBaseball MVP</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 800px; margin: auto; }
+        #search-form { margin-bottom: 20px; }
+        #player-info, #statcast-chart { margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        #player-info h2 { margin-top: 0; }
+        #loading, #error { margin-top: 15px; font-weight: bold; }
+        #loading { color: #555; }
+        #error { color: red; }
+        .hidden { display: none; }
+        pre { background-color: #f4f4f4; padding: 10px; border-radius: 3px; white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+
+    <h1>Baseball Player Stats MVP</h1>
+
+    <form id="search-form">
+        <label for="player-name">Enter Player Name:</label>
+        <input type="text" id="player-name" name="player-name" required>
+        <button type="submit">Search</button>
+    </form>
+
+    <div id="loading" class="hidden">Loading...</div>
+    <div id="error" class="hidden"></div>
+
+    <div id="player-info" class="hidden">
+        <h2 id="player-name-display"></h2>
+        <p><strong>ID:</strong> <span id="player-id"></span></p>
+        <p><strong>Position Type:</strong> <span id="player-position"></span></p>
+        <p><strong>Season:</strong> <span id="player-season"></span></p>
+        <h3>Traditional Stats (<span id="stats-season"></span>):</h3>
+        <pre id="traditional-stats"></pre>
+    </div>
+
+    <div id="statcast-chart" class="hidden">
+        <h3>Statcast Visualization (<span id="chart-season"></span>):</h3>
+        <img id="chart-image" src="" alt="Statcast Data Visualization" style="max-width: 100%; height: auto;">
+        <p id="no-chart-message" class="hidden">Could not generate Statcast chart (no data available or error occurred).</p>
+    </div>
+
+    <script>
+        const searchForm = document.getElementById('search-form');
+        const playerNameInput = document.getElementById('player-name');
+        const loadingDiv = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+        const playerInfoDiv = document.getElementById('player-info');
+        const statcastChartDiv = document.getElementById('statcast-chart');
+        const noChartMessage = document.getElementById('no-chart-message');
+
+        searchForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const playerName = playerNameInput.value.trim();
+            if (!playerName) return;
+
+            // Reset UI
+            loadingDiv.classList.remove('hidden');
+            errorDiv.classList.add('hidden');
+            playerInfoDiv.classList.add('hidden');
+            statcastChartDiv.classList.add('hidden');
+            noChartMessage.classList.add('hidden');
+            document.getElementById('chart-image').src = ''; // Clear previous image
+
+
+            try {
+                // 1. Search for Player ID
+                const searchResponse = await fetch(`/search_player?name=${encodeURIComponent(playerName)}`);
+                const searchData = await searchResponse.json();
+
+                if (!searchResponse.ok) {
+                    throw new Error(searchData.error || `Error searching for player (HTTP ${searchResponse.status})`);
+                }
+
+                const { mlbam_id, name_first, name_last } = searchData;
+
+                // 2. Fetch Player Stats and Chart
+                const statsResponse = await fetch(`/player_stats?mlbam_id=${mlbam_id}&name_first=${encodeURIComponent(name_first)}&name_last=${encodeURIComponent(name_last)}`);
+                const statsData = await statsResponse.json();
+
+                if (!statsResponse.ok) {
+                    throw new Error(statsData.error || `Error fetching player stats (HTTP ${statsResponse.status})`);
+                }
+
+                // 3. Update UI
+                displayPlayerData(statsData);
+                loadingDiv.classList.add('hidden');
+
+
+            } catch (err) {
+                console.error("Error:", err);
+                errorDiv.textContent = `Error: ${err.message}`;
+                errorDiv.classList.remove('hidden');
+                loadingDiv.classList.add('hidden');
+            }
+        });
+
+        function displayPlayerData(data) {
+            const { player_info, statcast_plot } = data;
+
+            if (!player_info) {
+                 errorDiv.textContent = 'Error: Received incomplete data from server.';
+                 errorDiv.classList.remove('hidden');
+                 return;
+            }
+
+            // Display basic info
+            document.getElementById('player-name-display').textContent = player_info.name || 'N/A';
+            document.getElementById('player-id').textContent = player_info.id || 'N/A';
+            document.getElementById('player-position').textContent = player_info.position_type || 'N/A';
+            document.getElementById('player-season').textContent = player_info.season || 'N/A';
+            document.getElementById('stats-season').textContent = player_info.season || 'N/A';
+             document.getElementById('chart-season').textContent = player_info.season || 'N/A';
+
+
+            // Display traditional stats
+            const statsPre = document.getElementById('traditional-stats');
+            if (player_info.traditional_stats && Object.keys(player_info.traditional_stats).length > 0) {
+                 statsPre.textContent = JSON.stringify(player_info.traditional_stats, null, 2);
+            } else {
+                 statsPre.textContent = 'No traditional stats available for this season.';
+            }
+
+            playerInfoDiv.classList.remove('hidden');
+
+            // Display chart (or message if no chart)
+            const chartImage = document.getElementById('chart-image');
+            if (statcast_plot) {
+                chartImage.src = statcast_plot;
+                chartImage.classList.remove('hidden');
+                noChartMessage.classList.add('hidden');
+                statcastChartDiv.classList.remove('hidden');
+            } else {
+                 chartImage.classList.add('hidden');
+                 noChartMessage.classList.remove('hidden');
+                 statcastChartDiv.classList.remove('hidden'); // Show the div to display the 'no chart' message
+            }
+        }
+    </script>
+
+</body>
+</html> 
